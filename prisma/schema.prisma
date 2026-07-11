@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// 1. 玩家账号表
+model User {
+  id            String             @id @default(uuid())
+  email         String             @unique
+  createdAt     DateTime           @default(now())
+  assessment    AssessmentRecord?
+  subscription  Subscription?
+}
+
+// 2. 测评进度表 改回 String 适配数据库text
+model AssessmentRecord {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  stepData    String   @default("{}")
+  result      String?
+  isCompleted Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// 3. 订阅/会员表
+model Subscription {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  status    String   @default("free")
+  expiresAt DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

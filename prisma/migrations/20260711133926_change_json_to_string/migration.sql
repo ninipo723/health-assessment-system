@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "AssessmentRecord" ALTER COLUMN "stepData" SET DATA TYPE TEXT,
+ALTER COLUMN "result" SET DATA TYPE TEXT;
