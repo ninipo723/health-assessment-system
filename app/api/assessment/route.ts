@@ -24,19 +24,19 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
   }
 }
 
-function parseStepData(rawStr: string | null): Record<string, any> {
-  if (!rawStr) return {};
-  try {
-    return JSON.parse(rawStr);
-  } catch {
-    return {};
+// 核心修复：支持 unknown 类型，安全解析 JSON
+function parseStepData(raw: unknown): Record<string, any> {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw as Record<string, any>;
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return {}; }
   }
+  return {};
 }
 
 export async function GET() {
   const testEmail = 'test@example.com';
   try {
-    // @ts-ignore
     const user = await safeDbRun(async () => {
       let u = await prisma.user.findUnique({ where: { email: testEmail } });
       if (!u) u = await prisma.user.create({ data: { email: testEmail } });
@@ -44,27 +44,21 @@ export async function GET() {
     });
 
     const userId = user.id;
-    // @ts-ignore
     const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId } }));
 
     if (!record) {
-      return NextResponse.json(
-        { stepData: {}, isCompleted: false },
-        { headers: corsHeaders }
-      );
+      return NextResponse.json({ stepData: {}, isCompleted: false }, { headers: corsHeaders });
     }
 
-    const parsedStepData = parseStepData(record?.stepData ?? null);
+    // 修复：直接传入 record.stepData
+    const parsedStepData = parseStepData(record.stepData);
     return NextResponse.json(
-      { stepData: parsedStepData, isCompleted: record?.isCompleted ?? false },
+      { stepData: parsedStepData, isCompleted: record.isCompleted ?? false },
       { headers: corsHeaders }
     );
   } catch (error) {
     console.error('GET Error:', error);
-    return NextResponse.json(
-      { error: '获取进度失败' },
-      { status: 500, headers: corsHeaders }
-    );
+    return NextResponse.json({ error: '获取进度失败' }, { status: 500, headers: corsHeaders });
   }
 }
 
@@ -74,40 +68,29 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const saveData = body?.stepData && typeof body.stepData === 'object' ? body.stepData : {};
 
-    // @ts-ignore
     const user = await safeDbRun(async () => {
       let u = await prisma.user.findUnique({ where: { email: testEmail } });
       if (!u) u = await prisma.user.create({
-        data: {
-          email: testEmail,
-          subscription: { create: { status: "free" } }
-        }
+        data: { email: testEmail, subscription: { create: { status: "free" } } }
       });
       return u;
     });
 
     const userId = user.id;
-    // @ts-ignore
+    // 核心修复：Prisma 7 的 Json 字段直接传对象，千万不要 JSON.stringify()
     const record = await safeDbRun(() => prisma.assessmentRecord.upsert({
       where: { userId },
-      update: { stepData: JSON.stringify(saveData), isCompleted: false },
-      create: {
-        userId,
-        stepData: JSON.stringify(saveData),
-        isCompleted: false
-      }
+      update: { stepData: saveData, isCompleted: false },
+      create: { userId, stepData: saveData, isCompleted: false }
     }));
 
-    const parsedStepData = parseStepData(record?.stepData ?? null);
+    const parsedStepData = parseStepData(record.stepData);
     return NextResponse.json(
       { message: '分步进度保存成功', stepData: parsedStepData },
       { headers: corsHeaders }
     );
   } catch (error) {
     console.error('POST Assessment Error:', error);
-    return NextResponse.json(
-      { error: '分步保存失败' },
-      { status: 500, headers: corsHeaders }
-    );
+    return NextResponse.json({ error: '分步保存失败' }, { status: 500, headers: corsHeaders });
   }
 }

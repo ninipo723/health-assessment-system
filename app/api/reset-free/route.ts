@@ -24,29 +24,54 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
   }
 }
 
-export async function POST() {
+// 核心修复：支持 unknown 类型
+function parseResult(raw: unknown): Record<string, any> {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw as Record<string, any>;
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return {}; }
+  }
+  return {};
+}
+
+export async function GET() {
   const testEmail = "test@example.com";
   try {
-    // @ts-ignore
     const user = await safeDbRun(() => prisma.user.findUnique({
-      where: { email: testEmail }
+      where: { email: testEmail },
+      include: { subscription: true }
     }));
+
     if (!user) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
+
     const userId = user.id;
+    const subscriptionStatus = user.subscription?.status || 'free';
+    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId } }));
 
-    await safeDbRun(() => prisma.subscription.update({
-      where: { userId },
-      data: { status: "free" }
-    }));
+    if (!record || !record.isCompleted) {
+      return NextResponse.json({ error: '暂无测评结果，请先完成测评' }, { status: 404, headers: corsHeaders });
+    }
 
-    return NextResponse.json({ message: "已重置为免费用户" }, { headers: corsHeaders });
+    // 修复：直接传入 record.result
+    const realResult = parseResult(record.result);
+    
+    if (subscriptionStatus === 'active') {
+      return NextResponse.json({ isPremium: true, result: realResult }, { headers: corsHeaders });
+    } else {
+      const maskedResult = {
+        bmi: realResult.bmi ?? 0,
+        recommendedCalories: '*** (需开通会员查看)',
+        targetDate: '*** (需开通会员查看)',
+      };
+      return NextResponse.json(
+        { isPremium: false, result: maskedResult, upgradeMessage: '您的基础BMI已生成，升级会员解锁完整健康规划！' },
+        { headers: corsHeaders }
+      );
+    }
   } catch (error) {
-    console.error('Reset Full Error:', error);
-    return NextResponse.json(
-      { error: '重置失败' },
-      { status: 500, headers: corsHeaders }
-    );
+    console.error('GET Result Error:', error);
+    return NextResponse.json({ error: '获取结果失败' }, { status: 500, headers: corsHeaders });
   }
 }
