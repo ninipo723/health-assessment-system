@@ -29,13 +29,22 @@ export async function POST() {
   try {
     // 1. 先查询用户
     const user = await safeDbRun(() => prisma.user.findUnique({
-      where: { email: testEmail }
+      where: { email: testEmail },
+      include: { subscription: true }
     }));
     if (!user) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
 
-    // 2. 使用upsert：有订阅就更新会员，没有就新建会员订阅
+    // 新增判断：当前已经是会员，直接返回提示
+    if (user.subscription?.status === 'active') {
+      return NextResponse.json(
+        { message: '您已经是尊贵会员！无需重复开通' },
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
+    // 2. 使用upsert开通会员
     const updatedSubscription = await safeDbRun(() => prisma.subscription.upsert({
       where: { userId: user.id },
       update: {
@@ -51,7 +60,7 @@ export async function POST() {
 
     return NextResponse.json(
       {
-        message: '支付成功！您已成为尊贵会员',
+        message: '支付成功！您已成功开通30天尊贵会员',
         subscription: updatedSubscription
       },
       { headers: corsHeaders }
