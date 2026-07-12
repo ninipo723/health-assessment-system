@@ -39,7 +39,7 @@ export async function GET() {
     const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail },
       include: { subscription: true }
-    }));
+    })) as any;
 
     if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
@@ -47,7 +47,9 @@ export async function GET() {
     const user = userRaw;
     const subscriptionStatus = user.subscription?.status || 'free';
 
-    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId: user.id } })) as Record<string, any> | null;
+    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({
+      where: { userId: user.id }
+    })) as any;
 
     if (!record || !record.isCompleted) {
       return NextResponse.json(
@@ -56,7 +58,7 @@ export async function GET() {
       );
     }
 
-    const realResult = parseResult(record.result ?? null);
+    const realResult = parseResult(record.result);
     if (subscriptionStatus === 'active') {
       return NextResponse.json(
         {

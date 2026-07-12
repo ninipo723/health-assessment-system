@@ -27,12 +27,13 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
 export async function POST() {
   const testEmail = "test@example.com";
   try {
-    const user = await safeDbRun(() => prisma.user.findUnique({
+    const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail }
-    }));
-    if (!user) {
+    })) as any;
+    if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
+    const user = userRaw;
 
     await safeDbRun(() => prisma.subscription.update({
       where: { userId: user.id },

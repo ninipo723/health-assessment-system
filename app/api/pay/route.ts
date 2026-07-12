@@ -30,7 +30,7 @@ export async function POST() {
     const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail },
       include: { subscription: true }
-    }));
+    })) as any;
     if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
@@ -54,7 +54,7 @@ export async function POST() {
         status: 'active',
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
       }
-    }));
+    })) as any;
 
     return NextResponse.json(
       {
