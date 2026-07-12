@@ -46,19 +46,19 @@ export async function GET() {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
     const userId = user.id;
-    const subscriptionStatus = user.subscription?.status || 'free';
+    const subscriptionStatus = user?.subscription?.status || 'free';
 
     // @ts-ignore
     const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId } }));
 
-    if (!record || !record.isCompleted) {
+    if (!record || !record?.isCompleted) {
       return NextResponse.json(
         { error: '暂无测评结果，请先完成测评' },
         { status: 404, headers: corsHeaders }
       );
     }
 
-    const realResult = parseResult(record.result ?? null);
+    const realResult = parseResult(record?.result ?? null);
     if (subscriptionStatus === 'active') {
       return NextResponse.json(
         {

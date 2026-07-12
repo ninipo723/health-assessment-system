@@ -37,7 +37,7 @@ export async function POST() {
     }
     const userId = user.id;
 
-    if (user.subscription?.status === 'active') {
+    if (user?.subscription?.status === 'active') {
       return NextResponse.json(
         { message: '您已经是尊贵会员！无需重复开通' },
         { status: 200, headers: corsHeaders }

@@ -54,9 +54,9 @@ export async function GET() {
       );
     }
 
-    const parsedStepData = parseStepData(record.stepData ?? null);
+    const parsedStepData = parseStepData(record?.stepData ?? null);
     return NextResponse.json(
-      { stepData: parsedStepData, isCompleted: record.isCompleted },
+      { stepData: parsedStepData, isCompleted: record?.isCompleted ?? false },
       { headers: corsHeaders }
     );
   } catch (error) {
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
       }
     }));
 
-    const parsedStepData = parseStepData(record.stepData ?? null);
+    const parsedStepData = parseStepData(record?.stepData ?? null);
     return NextResponse.json(
       { message: '分步进度保存成功', stepData: parsedStepData },
       { headers: corsHeaders }
