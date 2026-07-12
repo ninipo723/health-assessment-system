@@ -1,4 +1,3 @@
-// utils/healthCalculator.ts
 export interface HealthInput {
   gender: string;
   age: number;
@@ -14,7 +13,34 @@ export interface HealthResult {
   targetDate: string; // YYYY-MM-DD
 }
 
+/** 统一校验输入合法性，和前端/后端接口校验规则完全一致 */
+function isInputValid(input: HealthInput): boolean {
+  const { age, height, weight, targetWeight } = input;
+  const maxLimit = 99999;
+
+  // 年龄必须1~99999 整数
+  const ageOk = !isNaN(age) && Number.isInteger(age) && age >= 1 && age <= maxLimit;
+  // 身高、体重、目标体重 1~99999，支持小数
+  const floatOk = (n: number) => !isNaN(n) && n > 0 && n <= maxLimit;
+  const hOk = floatOk(height);
+  const wOk = floatOk(weight);
+  const tOk = floatOk(targetWeight);
+  // 当前体重=目标体重无测评意义
+  const weightEqual = weight === targetWeight;
+
+  return ageOk && hOk && wOk && tOk && !weightEqual;
+}
+
 export function calculateHealth(input: HealthInput): HealthResult {
+  // 非法参数直接返回空结果，测试用例可判断 bmi === 0
+  if (!isInputValid(input)) {
+    return {
+      bmi: 0,
+      recommendedCalories: 0,
+      targetDate: "",
+    };
+  }
+
   // 边界兜底1：身高<=0 防止除以0产生Infinity
   let heightInMeters = input.height / 100;
   if (heightInMeters <= 0) {

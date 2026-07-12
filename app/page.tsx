@@ -18,6 +18,23 @@ export default function Home() {
   // 实时会员状态展示
   const [vipStatusText, setVipStatusText] = useState('加载中...');
 
+  // ========== 新增1：页面打开自动拉取后端保存的分步进度，实现进度恢复 ==========
+  useEffect(() => {
+    const loadSavedProgress = async () => {
+      try {
+        const res = await fetch('/api/assessment');
+        const data = await res.json();
+        if (data.stepData && Object.keys(data.stepData).length > 0) {
+          setFormData(data.stepData);
+          setTip('已加载上次填写的测评进度');
+        }
+      } catch (err) {
+        console.error('读取历史进度失败', err);
+      }
+    };
+    loadSavedProgress();
+  }, []);
+
   // 页面加载自动查询会员状态
   useEffect(() => {
     const fetchUserVipState = async () => {
@@ -42,6 +59,19 @@ export default function Home() {
       ...prev,
       [key]: rawValue
     }));
+  };
+
+  // ========== 新增2：分步保存接口调用函数，输入失焦自动保存增量数据 ==========
+  const saveStepData = async () => {
+    try {
+      await fetch('/api/assessment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stepData: formData })
+      });
+    } catch (err) {
+      console.log('分步临时保存失败', err);
+    }
   };
 
   // 一键清空所有表单数据（重置为空字符串）
@@ -211,7 +241,10 @@ export default function Home() {
             <select
               className="w-full border p-2 rounded"
               value={formData.gender}
-              onChange={(e) => handleInputChange('gender', e.target.value)}
+              onChange={(e) => {
+                handleInputChange('gender', e.target.value);
+                saveStepData();
+              }}
             >
               <option value="">--请选择性别--</option>
               <option value="male">男</option>
@@ -226,6 +259,7 @@ export default function Home() {
               className="w-full border p-2 rounded"
               value={formData.age}
               onChange={(e) => handleInputChange('age', e.target.value)}
+              onBlur={saveStepData}
               placeholder="仅支持1~99999整数，提交时校验"
             />
           </div>
@@ -237,6 +271,7 @@ export default function Home() {
               className="w-full border p-2 rounded"
               value={formData.height}
               onChange={(e) => handleInputChange('height', e.target.value)}
+              onBlur={saveStepData}
               placeholder="支持1~99999整数/小数，提交时校验"
             />
           </div>
@@ -248,6 +283,7 @@ export default function Home() {
               className="w-full border p-2 rounded"
               value={formData.weight}
               onChange={(e) => handleInputChange('weight', e.target.value)}
+              onBlur={saveStepData}
               placeholder="支持1~99999整数/小数，提交时校验"
             />
           </div>
@@ -259,6 +295,7 @@ export default function Home() {
               className="w-full border p-2 rounded"
               value={formData.targetWeight}
               onChange={(e) => handleInputChange('targetWeight', e.target.value)}
+              onBlur={saveStepData}
               placeholder="支持1~99999整数/小数，提交时校验"
             />
           </div>
@@ -268,7 +305,10 @@ export default function Home() {
             <select
               className="w-full border p-2 rounded"
               value={formData.exerciseFrequency}
-              onChange={(e) => handleInputChange('exerciseFrequency', e.target.value)}
+              onChange={(e) => {
+                handleInputChange('exerciseFrequency', e.target.value);
+                saveStepData();
+              }}
             >
               <option value="">--请选择运动频率--</option>
               <option value="low">low 低强度</option>

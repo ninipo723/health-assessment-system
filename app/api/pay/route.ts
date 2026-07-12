@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import type { User, Subscription } from '@prisma/client';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,13 +29,14 @@ export async function POST() {
   const testEmail = "test@example.com";
   try {
     // 1. 先查询用户
-    const user = await safeDbRun(() => prisma.user.findUnique({
+    const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail },
       include: { subscription: true }
     }));
-    if (!user) {
+    if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
+    const user = userRaw as User & { subscription: Subscription | null };
 
     // 新增判断：当前已经是会员，直接返回提示
     if (user.subscription?.status === 'active') {

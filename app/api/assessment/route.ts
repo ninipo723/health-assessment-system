@@ -9,13 +9,9 @@ const corsHeaders = {
 };
 
 export async function OPTIONS() {
-  return new Response(null, {
-    status: 204,
-    headers: corsHeaders,
-  });
+  return new Response(null, { status: 204, headers: corsHeaders });
 }
 
-// 数据库断连重试封装，解决 Connection terminated 报错
 async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
   try {
     return await fn();
@@ -39,17 +35,20 @@ function parseStepData(rawStr: string | null): Record<string, any> {
   }
 }
 
-// GET 进度恢复接口
+// GET 进度恢复接口：读取用户上次填写的分步数据
 export async function GET() {
+  const testEmail = 'test@example.com';
   try {
-    const testEmail = 'test@example.com';
+    const user = await safeDbRun(() => prisma.user.findUnique({
+      where: { email: testEmail }
+    }));
 
-    // 获取/创建测试用户
-    const user = await safeDbRun(async () => {
-      let u = await prisma.user.findUnique({ where: { email: testEmail } });
-      if (!u) u = await prisma.user.create({ data: { email: testEmail } });
-      return u;
-    });
+    if (!user) {
+      return NextResponse.json(
+        { stepData: {}, isCompleted: false },
+        { headers: corsHeaders }
+      );
+    }
 
     const userId = user.id;
     const record: AssessmentRecord | null = await safeDbRun(() =>
@@ -63,6 +62,7 @@ export async function GET() {
       );
     }
 
+    // 使用工具函数，类型安全
     const parsedStepData = parseStepData(record.stepData);
 
     return NextResponse.json(
@@ -78,29 +78,33 @@ export async function GET() {
   }
 }
 
-// POST 分步保存接口
+// POST 分步增量保存接口
 export async function POST(request: Request) {
+  const testEmail = 'test@example.com';
   try {
     const body = await request.json();
     const { stepData } = body ?? {};
-    const testEmail = 'test@example.com';
+    const saveData = stepData && typeof stepData === 'object' ? stepData : {};
 
-    // 获取/创建测试用户
-    const user = await safeDbRun(async () => {
-      let u = await prisma.user.findUnique({ where: { email: testEmail } });
-      if (!u) u = await prisma.user.create({ data: { email: testEmail } });
-      return u;
-    });
+    // 用户不存在自动创建
+    const user = await safeDbRun(() => prisma.user.upsert({
+      where: { email: testEmail },
+      update: {},
+      create: {
+        email: testEmail,
+        subscription: { create: { status: "free" } }
+      }
+    }));
 
-    // upsert 更新/创建测评记录，JSON转字符串入库
+    const userId = user.id;
     const record: AssessmentRecord = await safeDbRun(() =>
       prisma.assessmentRecord.upsert({
-        where: { userId: user.id },
-        update: { stepData: JSON.stringify(stepData) },
+        where: { userId },
+        update: { stepData: JSON.stringify(saveData), isCompleted: false },
         create: {
-          userId: user.id,
-          stepData: JSON.stringify(stepData),
-          isCompleted: false,
+          userId,
+          stepData: JSON.stringify(saveData),
+          isCompleted: false
         },
       })
     );
@@ -108,13 +112,13 @@ export async function POST(request: Request) {
     const parsedStepData = parseStepData(record.stepData);
 
     return NextResponse.json(
-      { message: '保存成功', stepData: parsedStepData },
+      { message: '分步进度保存成功', stepData: parsedStepData },
       { headers: corsHeaders }
     );
   } catch (error) {
     console.error('POST Error:', error);
     return NextResponse.json(
-      { error: '保存失败' },
+      { error: '分步保存失败' },
       { status: 500, headers: corsHeaders }
     );
   }

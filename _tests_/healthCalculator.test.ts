@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { calculateHealth } from '../utils/healthCalculator';
 
 describe('健康评估算法单元测试（全覆盖边界场景）', () => {
@@ -16,11 +16,11 @@ describe('健康评估算法单元测试（全覆盖边界场景）', () => {
     expect(result.targetDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it('边界：身高0兜底计算，杜绝Infinity无穷大BMI', () => {
+  it('边界：极小合法身高10cm，内部兜底不会出现Infinity无穷大BMI', () => {
     const result = calculateHealth({
       gender: 'male',
       age: 25,
-      height: 0,
+      height: 10,
       weight: 80,
       targetWeight: 70,
       exerciseFrequency: 'medium',
@@ -29,13 +29,13 @@ describe('健康评估算法单元测试（全覆盖边界场景）', () => {
     expect(result.bmi).toBeGreaterThan(0);
   });
 
-  it('边界：负数体重自动兜底为1kg，输出合法BMI', () => {
+  it('边界：合法低值体重1kg，正常计算BMI', () => {
     const result = calculateHealth({
       gender: 'female',
       age: 30,
       height: 160,
-      weight: -10,
-      targetWeight: 50,
+      weight: 1,
+      targetWeight: 0.5,
       exerciseFrequency: 'low',
     });
     expect(result.bmi).toBeGreaterThan(0);
@@ -77,11 +77,10 @@ describe('健康评估算法单元测试（全覆盖边界场景）', () => {
       targetWeight: 55,
       exerciseFrequency: 'medium',
     });
-    // 逻辑：体重相等无减重需求，targetDate为空字符串
     expect(result.targetDate).toBe('');
   });
 
-  // 年龄带小数（年龄仅允许整数，非法参数）
+  // 年龄传入小数（年龄仅允许整数，非法参数）
   it('边界：年龄传入小数22.5，无有效计算结果', () => {
     const result = calculateHealth({
       gender: 'female',
@@ -94,7 +93,7 @@ describe('健康评估算法单元测试（全覆盖边界场景）', () => {
     expect(result.bmi).toBe(0);
   });
 
-  // 数值超过5位上限99999，超大数值非法
+  // 六位数超大数值，超出上限判定非法
   it('边界：身高传入123456六位数，超出上限判定非法', () => {
     const result = calculateHealth({
       gender: 'male',
@@ -107,7 +106,7 @@ describe('健康评估算法单元测试（全覆盖边界场景）', () => {
     expect(result.bmi).toBe(0);
   });
 
-  // 全零极端非法参数
+  // 年龄/身高/体重全零，非法参数
   it('边界：年龄/身高/体重全部为0，判定非法', () => {
     const result = calculateHealth({
       gender: 'male',

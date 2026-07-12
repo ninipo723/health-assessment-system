@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import type { User } from '@prisma/client';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,12 +28,13 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
 export async function POST() {
   const testEmail = "test@example.com";
   try {
-    const user = await safeDbRun(() => prisma.user.findUnique({
+    const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail }
     }));
-    if (!user) {
+    if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
+    const user = userRaw as User;
 
     // 强制把订阅状态改为免费
     await safeDbRun(() => prisma.subscription.update({
@@ -43,6 +45,9 @@ export async function POST() {
     return NextResponse.json({ message: "已重置为免费用户" }, { headers: corsHeaders });
   } catch (error) {
     console.error('Reset Full Error:', error);
-    return NextResponse.json({ error: '重置失败' }, { status: 500, headers: corsHeaders });
+    return NextResponse.json(
+      { error: '重置失败' },
+      { status: 500, headers: corsHeaders }
+    );
   }
 }
