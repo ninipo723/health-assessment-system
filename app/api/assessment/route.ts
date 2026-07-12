@@ -50,10 +50,10 @@ export async function GET() {
       return NextResponse.json({ stepData: {}, isCompleted: false }, { headers: corsHeaders });
     }
 
-    // 修复：直接传入 record.stepData
-    const parsedStepData = parseStepData(record.stepData);
+    // 终极修复：使用 `as any` 绕过 Prisma 7 的 Json 类型推断限制
+    const parsedStepData = parseStepData((record as any).stepData);
     return NextResponse.json(
-      { stepData: parsedStepData, isCompleted: record.isCompleted ?? false },
+      { stepData: parsedStepData, isCompleted: (record as any).isCompleted ?? false },
       { headers: corsHeaders }
     );
   } catch (error) {
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       create: { userId, stepData: saveData, isCompleted: false }
     }));
 
-    const parsedStepData = parseStepData(record.stepData);
+    const parsedStepData = parseStepData((record as any).stepData);
     return NextResponse.json(
       { message: '分步进度保存成功', stepData: parsedStepData },
       { headers: corsHeaders }
