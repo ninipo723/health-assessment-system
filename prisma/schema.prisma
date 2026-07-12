@@ -4,37 +4,27 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-// 1. 玩家账号表
 model User {
-  id            String             @id @default(uuid())
-  email         String             @unique
-  createdAt     DateTime           @default(now())
-  assessment    AssessmentRecord?
+  id            String    @id @default(cuid())
+  email         String    @unique
   subscription  Subscription?
+  assessments   AssessmentRecord[]
 }
 
-// 2. 测评进度表 改回 String 适配数据库text
-model AssessmentRecord {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  stepData    String   @default("{}")
-  result      String?
-  isCompleted Boolean  @default(false)
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-// 3. 订阅/会员表
 model Subscription {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  status    String   @default("free")
-  expiresAt DateTime?
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String  @id
+  status    String  @default("free") // free / active
+  expiresAt Date?
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
 
-  @@index([userId])
+model AssessmentRecord {
+  userId      String    @id
+  stepData    Json      @default("{}") // 直接存对象，不用手动stringify
+  result      Json?
+  isCompleted Boolean   @default(false)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

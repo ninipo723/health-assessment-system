@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import type { User, Subscription, AssessmentRecord } from '@prisma/client';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,7 +25,6 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
   }
 }
 
-// 核心修复：支持 unknown 类型
 function parseResult(raw: unknown): Record<string, any> {
   if (!raw) return {};
   if (typeof raw === 'object') return raw as Record<string, any>;
@@ -37,26 +37,28 @@ function parseResult(raw: unknown): Record<string, any> {
 export async function GET() {
   const testEmail = "test@example.com";
   try {
-    const user = await safeDbRun(() => prisma.user.findUnique({
+    // 带关联subscription，复合类型标注
+    const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail },
       include: { subscription: true }
     }));
-
-    if (!user) {
+    if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
-
+    // 复合类型：User + 关联subscription
+    const user = userRaw as User & { subscription: Subscription | null };
     const userId = user.id;
     const subscriptionStatus = user.subscription?.status || 'free';
-    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId } }));
 
-    if (!record || !(record as any).isCompleted) {
+    const record: AssessmentRecord | null = await safeDbRun(() => 
+      prisma.assessmentRecord.findUnique({ where: { userId } })
+    );
+
+    if (!record || !record.isCompleted) {
       return NextResponse.json({ error: '暂无测评结果，请先完成测评' }, { status: 404, headers: corsHeaders });
     }
 
-    // 终极修复：使用 `as any` 绕过 Prisma 7 的 Json 类型推断限制
-    const realResult = parseResult((record as any).result);
-    
+    const realResult = parseResult(record.result);
     if (subscriptionStatus === 'active') {
       return NextResponse.json({ isPremium: true, result: realResult }, { headers: corsHeaders });
     } else {

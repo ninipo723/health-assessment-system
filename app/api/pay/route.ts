@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import type { User, Subscription } from '@prisma/client';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,25 +28,24 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
 export async function POST() {
   const testEmail = "test@example.com";
   try {
-    // @ts-ignore
-    const user = await safeDbRun(() => prisma.user.findUnique({
+    const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail },
       include: { subscription: true }
     }));
-    if (!user) {
+    if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
+    const user = userRaw as User & { subscription: Subscription | null };
     const userId = user.id;
 
-    if (user?.subscription?.status === 'active') {
+    if (user.subscription?.status === 'active') {
       return NextResponse.json(
         { message: '您已经是尊贵会员！无需重复开通' },
         { status: 200, headers: corsHeaders }
       );
     }
 
-    // @ts-ignore
-    const updatedSubscription = await safeDbRun(() => prisma.subscription.upsert({
+    const updatedSubscription: Subscription = await safeDbRun(() => prisma.subscription.upsert({
       where: { userId },
       update: {
         status: 'active',
@@ -59,17 +59,11 @@ export async function POST() {
     }));
 
     return NextResponse.json(
-      {
-        message: '支付成功！您已成功开通30天尊贵会员',
-        subscription: updatedSubscription
-      },
+      { message: '支付成功！您已成功开通30天尊贵会员', subscription: updatedSubscription },
       { headers: corsHeaders }
     );
   } catch (error) {
     console.error('Pay Error Full:', error);
-    return NextResponse.json(
-      { error: '支付状态更新失败' },
-      { status: 500, headers: corsHeaders }
-    );
+    return NextResponse.json({ error: '支付状态更新失败' }, { status: 500, headers: corsHeaders });
   }
 }

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+// 恢复官方类型导入，彻底解决“无导出成员”报错
+import type { User, AssessmentRecord } from '@prisma/client';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,7 +26,7 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
   }
 }
 
-// 核心修复：支持 unknown 类型，安全解析 JSON
+// 适配Prisma Json类型解析，接收unknown安全转换
 function parseStepData(raw: unknown): Record<string, any> {
   if (!raw) return {};
   if (typeof raw === 'object') return raw as Record<string, any>;
@@ -37,23 +39,30 @@ function parseStepData(raw: unknown): Record<string, any> {
 export async function GET() {
   const testEmail = 'test@example.com';
   try {
-    const user = await safeDbRun(async () => {
+    // 明确标注User类型，TS不再推断unknown
+    const user: User = await safeDbRun(async () => {
       let u = await prisma.user.findUnique({ where: { email: testEmail } });
       if (!u) u = await prisma.user.create({ data: { email: testEmail } });
       return u;
     });
 
     const userId = user.id;
-    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId } }));
+    // 原生标注AssessmentRecord | null，TS识别所有字段
+    const record: AssessmentRecord | null = await safeDbRun(() => 
+      prisma.assessmentRecord.findUnique({ where: { userId } })
+    );
 
     if (!record) {
-      return NextResponse.json({ stepData: {}, isCompleted: false }, { headers: corsHeaders });
+      return NextResponse.json(
+        { stepData: {}, isCompleted: false },
+        { headers: corsHeaders }
+      );
     }
 
-    // 终极修复：使用 `as any` 绕过 Prisma 7 的 Json 类型推断限制
-    const parsedStepData = parseStepData((record as any).stepData);
+    // 原生识别record.stepData，不会报“属性不存在于{}”
+    const parsedStepData = parseStepData(record.stepData);
     return NextResponse.json(
-      { stepData: parsedStepData, isCompleted: (record as any).isCompleted ?? false },
+      { stepData: parsedStepData, isCompleted: record.isCompleted },
       { headers: corsHeaders }
     );
   } catch (error) {
@@ -68,7 +77,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const saveData = body?.stepData && typeof body.stepData === 'object' ? body.stepData : {};
 
-    const user = await safeDbRun(async () => {
+    const user: User = await safeDbRun(async () => {
       let u = await prisma.user.findUnique({ where: { email: testEmail } });
       if (!u) u = await prisma.user.create({
         data: { email: testEmail, subscription: { create: { status: "free" } } }
@@ -77,14 +86,14 @@ export async function POST(request: Request) {
     });
 
     const userId = user.id;
-    // 核心修复：Prisma 7 的 Json 字段直接传对象，千万不要 JSON.stringify()
-    const record = await safeDbRun(() => prisma.assessmentRecord.upsert({
+    // 重点：Prisma Json字段直接传对象，删除JSON.stringify
+    const record: AssessmentRecord = await safeDbRun(() => prisma.assessmentRecord.upsert({
       where: { userId },
       update: { stepData: saveData, isCompleted: false },
       create: { userId, stepData: saveData, isCompleted: false }
     }));
 
-    const parsedStepData = parseStepData((record as any).stepData);
+    const parsedStepData = parseStepData(record.stepData);
     return NextResponse.json(
       { message: '分步进度保存成功', stepData: parsedStepData },
       { headers: corsHeaders }
