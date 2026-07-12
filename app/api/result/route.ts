@@ -36,29 +36,29 @@ function parseResult(rawStr: string | null): Record<string, any> {
 export async function GET() {
   const testEmail = "test@example.com";
   try {
-    const userRaw = await safeDbRun(() => prisma.user.findUnique({
+    // @ts-ignore
+    const user = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail },
       include: { subscription: true }
-    })) as Record<string, any>;
+    }));
 
-    if (!userRaw) {
+    if (!user) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
-    const userId = userRaw.id;
-    const subscriptionStatus = userRaw.subscription?.status || 'free';
+    const userId = user.id;
+    const subscriptionStatus = user.subscription?.status || 'free';
 
-    const recordRaw = await safeDbRun(() => prisma.assessmentRecord.findUnique({
-      where: { userId }
-    })) as Record<string, any> | null;
+    // @ts-ignore
+    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId } }));
 
-    if (!recordRaw || !recordRaw.isCompleted) {
+    if (!record || !record.isCompleted) {
       return NextResponse.json(
         { error: '暂无测评结果，请先完成测评' },
         { status: 404, headers: corsHeaders }
       );
     }
 
-    const realResult = parseResult(recordRaw.result ?? null);
+    const realResult = parseResult(record.result ?? null);
     if (subscriptionStatus === 'active') {
       return NextResponse.json(
         {
