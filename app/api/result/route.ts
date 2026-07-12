@@ -39,17 +39,15 @@ export async function GET() {
     const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail },
       include: { subscription: true }
-    })) as any;
+    })) as Record<string, any>;
 
     if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
-    const user = userRaw;
-    const subscriptionStatus = user.subscription?.status || 'free';
+    const userId = userRaw.id;
+    const subscriptionStatus = userRaw.subscription?.status || 'free';
 
-    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({
-      where: { userId: user.id }
-    })) as any;
+    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId } })) as Record<string, any> | null;
 
     if (!record || !record.isCompleted) {
       return NextResponse.json(
@@ -58,7 +56,7 @@ export async function GET() {
       );
     }
 
-    const realResult = parseResult(record.result);
+    const realResult = parseResult(record.result ?? null);
     if (subscriptionStatus === 'active') {
       return NextResponse.json(
         {
@@ -77,7 +75,6 @@ export async function GET() {
         {
           isPremium: false,
           result: maskedResult,
-          upgradeMessage: '您的基础BMI已生成，升级会员解锁完整健康规划！'
         },
         { headers: corsHeaders }
       );

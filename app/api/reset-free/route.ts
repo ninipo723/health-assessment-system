@@ -29,14 +29,14 @@ export async function POST() {
   try {
     const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail }
-    })) as any;
+    })) as Record<string, any>;
     if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
-    const user = userRaw;
+    const userId = userRaw.id;
 
     await safeDbRun(() => prisma.subscription.update({
-      where: { userId: user.id },
+      where: { userId },
       data: { status: "free" }
     }));
 

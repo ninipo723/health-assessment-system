@@ -30,13 +30,13 @@ export async function POST() {
     const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail },
       include: { subscription: true }
-    })) as any;
+    })) as Record<string, any>;
     if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
-    const user = userRaw;
+    const userId = userRaw.id;
 
-    if (user.subscription?.status === 'active') {
+    if (userRaw.subscription?.status === 'active') {
       return NextResponse.json(
         { message: '您已经是尊贵会员！无需重复开通' },
         { status: 200, headers: corsHeaders }
@@ -44,17 +44,17 @@ export async function POST() {
     }
 
     const updatedSubscription = await safeDbRun(() => prisma.subscription.upsert({
-      where: { userId: user.id },
+      where: { userId },
       update: {
         status: 'active',
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
       },
       create: {
-        userId: user.id,
+        userId,
         status: 'active',
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
       }
-    })) as any;
+    })) as Record<string, any>;
 
     return NextResponse.json(
       {

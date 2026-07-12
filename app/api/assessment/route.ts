@@ -36,14 +36,14 @@ function parseStepData(rawStr: string | null): Record<string, any> {
 export async function GET() {
   const testEmail = 'test@example.com';
   try {
-    const user = await safeDbRun(async () => {
-      let u = await prisma.user.findUnique({ where: { email: testEmail } }) as any;
-      if (!u) u = await prisma.user.create({ data: { email: testEmail } }) as any;
+    const userRaw = await safeDbRun(async () => {
+      let u = await prisma.user.findUnique({ where: { email: testEmail } });
+      if (!u) u = await prisma.user.create({ data: { email: testEmail } });
       return u;
-    });
+    }) as Record<string, any>;
 
-    const userId = user.id;
-    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId } })) as any;
+    const userId = userRaw.id;
+    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId } })) as Record<string, any> | null;
 
     if (!record) {
       return NextResponse.json(
@@ -52,8 +52,7 @@ export async function GET() {
       );
     }
 
-    const parsedStepData = parseStepData(record.stepData);
-
+    const parsedStepData = parseStepData(record.stepData ?? null);
     return NextResponse.json(
       { stepData: parsedStepData, isCompleted: record.isCompleted },
       { headers: corsHeaders }
@@ -70,35 +69,33 @@ export async function GET() {
 export async function POST(request: Request) {
   const testEmail = 'test@example.com';
   try {
-    const body = await request.json();
-    const { stepData } = body ?? {};
-    const saveData = stepData && typeof stepData === 'object' ? stepData : {};
+    const body = await request.json().catch(() => ({}));
+    const saveData = body?.stepData && typeof body.stepData === 'object' ? body.stepData : {};
 
-    const user = await safeDbRun(async () => {
-      let u = await prisma.user.findUnique({ where: { email: testEmail } }) as any;
-      if (!u) u = await prisma.user.create({ data: { email: testEmail, subscription: { create: { status: "free" } } } }) as any;
+    const userRaw = await safeDbRun(async () => {
+      let u = await prisma.user.findUnique({ where: { email: testEmail } });
+      if (!u) u = await prisma.user.create({ data: { email: testEmail, subscription: { create: { status: "free" } } } });
       return u;
-    });
+    }) as Record<string, any>;
 
-    const userId = user.id;
+    const userId = userRaw.id;
     const record = await safeDbRun(() => prisma.assessmentRecord.upsert({
       where: { userId },
       update: { stepData: JSON.stringify(saveData), isCompleted: false },
       create: {
         userId,
         stepData: JSON.stringify(saveData),
-        isCompleted: false,
+        isCompleted: false
       },
-    })) as any;
+    })) as Record<string, any>;
 
-    const parsedStepData = parseStepData(record.stepData);
-
+    const parsedStepData = parseStepData(record.stepData ?? null);
     return NextResponse.json(
       { message: '分步进度保存成功', stepData: parsedStepData },
       { headers: corsHeaders }
     );
   } catch (error) {
-    console.error('POST Error:', error);
+    console.error('POST Assessment Error:', error);
     return NextResponse.json(
       { error: '分步保存失败' },
       { status: 500, headers: corsHeaders }
