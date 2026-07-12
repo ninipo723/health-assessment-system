@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import type { AssessmentRecord } from '@prisma/client';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,11 +29,22 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
   }
 }
 
-// GET 进度接口
+/** 安全解析 stepData JSON 字符串 */
+function parseStepData(rawStr: string | null): Record<string, any> {
+  if (!rawStr) return {};
+  try {
+    return JSON.parse(rawStr);
+  } catch {
+    return {};
+  }
+}
+
+// GET 进度恢复接口
 export async function GET() {
   try {
     const testEmail = 'test@example.com';
 
+    // 获取/创建测试用户
     const user = await safeDbRun(async () => {
       let u = await prisma.user.findUnique({ where: { email: testEmail } });
       if (!u) u = await prisma.user.create({ data: { email: testEmail } });
@@ -40,19 +52,18 @@ export async function GET() {
     });
 
     const userId = user.id;
-    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId } }));
+    const record: AssessmentRecord | null = await safeDbRun(() =>
+      prisma.assessmentRecord.findUnique({ where: { userId } })
+    );
 
     if (!record) {
-      return NextResponse.json({ stepData: {}, isCompleted: false }, { headers: corsHeaders });
+      return NextResponse.json(
+        { stepData: {}, isCompleted: false },
+        { headers: corsHeaders }
+      );
     }
 
-    // 数据库是text字符串，必须解析为对象再返回
-    let parsedStepData = {};
-    try {
-      parsedStepData = JSON.parse(String(record.stepData));
-    } catch (e) {
-      parsedStepData = {};
-    }
+    const parsedStepData = parseStepData(record.stepData);
 
     return NextResponse.json(
       { stepData: parsedStepData, isCompleted: record.isCompleted },
@@ -60,37 +71,41 @@ export async function GET() {
     );
   } catch (error) {
     console.error('GET Error:', error);
-    return NextResponse.json({ error: '获取进度失败' }, { status: 500, headers: corsHeaders });
+    return NextResponse.json(
+      { error: '获取进度失败' },
+      { status: 500, headers: corsHeaders }
+    );
   }
 }
 
-// POST 保存接口
+// POST 分步保存接口
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { stepData } = body;
+    const { stepData } = body ?? {};
     const testEmail = 'test@example.com';
 
+    // 获取/创建测试用户
     const user = await safeDbRun(async () => {
       let u = await prisma.user.findUnique({ where: { email: testEmail } });
       if (!u) u = await prisma.user.create({ data: { email: testEmail } });
       return u;
     });
 
-    // 数据库为text类型，对象转字符串存入
-    const record = await safeDbRun(() => prisma.assessmentRecord.upsert({
-      where: { userId: user.id },
-      update: { stepData: JSON.stringify(stepData) },
-      create: { userId: user.id, stepData: JSON.stringify(stepData) },
-    }));
+    // upsert 更新/创建测评记录，JSON转字符串入库
+    const record: AssessmentRecord = await safeDbRun(() =>
+      prisma.assessmentRecord.upsert({
+        where: { userId: user.id },
+        update: { stepData: JSON.stringify(stepData) },
+        create: {
+          userId: user.id,
+          stepData: JSON.stringify(stepData),
+          isCompleted: false,
+        },
+      })
+    );
 
-    // 取出库中字符串，转回对象返回前端
-    let parsedStepData = {};
-    try {
-      parsedStepData = JSON.parse(String(record.stepData));
-    } catch (e) {
-      parsedStepData = {};
-    }
+    const parsedStepData = parseStepData(record.stepData);
 
     return NextResponse.json(
       { message: '保存成功', stepData: parsedStepData },
@@ -98,6 +113,9 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error('POST Error:', error);
-    return NextResponse.json({ error: '保存失败' }, { status: 500, headers: corsHeaders });
+    return NextResponse.json(
+      { error: '保存失败' },
+      { status: 500, headers: corsHeaders }
+    );
   }
 }
