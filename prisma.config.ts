@@ -6,7 +6,7 @@ export default defineConfig({
   migrations: {
     path: "prisma/migrations",
   },
-  // Migrate 迁移命令固定使用 DIRECT_URL（5432 直连，改表结构专用）
+  // 迁移、generate、db push 统一使用直连库 DIRECT_URL
   datasource: {
     url: env("DIRECT_URL"),
   },

@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -15,15 +14,15 @@ model User {
 }
 
 model Subscription {
-  userId    String  @id
-  status    String  @default("free") // free / active
-  expiresAt Date?
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String    @id
+  status    String    @default("free") // free / active
+  expiresAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AssessmentRecord {
   userId      String    @id
-  stepData    Json      @default("{}") // 直接存对象，不用手动stringify
+  stepData    Json      @default("{}")
   result      Json?
   isCompleted Boolean   @default(false)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
