@@ -53,6 +53,7 @@ export async function GET() {
     }
 
     const parsedStepData = parseStepData(record.stepData ?? null);
+
     return NextResponse.json(
       { stepData: parsedStepData, isCompleted: record.isCompleted },
       { headers: corsHeaders }
@@ -74,12 +75,17 @@ export async function POST(request: Request) {
 
     const userRaw = await safeDbRun(async () => {
       let u = await prisma.user.findUnique({ where: { email: testEmail } });
-      if (!u) u = await prisma.user.create({ data: { email: testEmail, subscription: { create: { status: "free" } } } });
+      if (!u) u = await prisma.user.create({
+        data: {
+          email: testEmail,
+          subscription: { create: { status: "free" } }
+        }
+      });
       return u;
     }) as Record<string, any>;
 
     const userId = userRaw.id;
-    const record = await safeDbRun(() => prisma.assessmentRecord.upsert({
+    const recordRaw = await safeDbRun(() => prisma.assessmentRecord.upsert({
       where: { userId },
       update: { stepData: JSON.stringify(saveData), isCompleted: false },
       create: {
@@ -89,7 +95,8 @@ export async function POST(request: Request) {
       },
     })) as Record<string, any>;
 
-    const parsedStepData = parseStepData(record.stepData ?? null);
+    const parsedStepData = parseStepData(recordRaw.stepData ?? null);
+
     return NextResponse.json(
       { message: '分步进度保存成功', stepData: parsedStepData },
       { headers: corsHeaders }
