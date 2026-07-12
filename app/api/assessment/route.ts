@@ -24,7 +24,6 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
   }
 }
 
-/** 安全解析 stepData JSON 字符串 */
 function parseStepData(rawStr: string | null): Record<string, any> {
   if (!rawStr) return {};
   try {
@@ -34,22 +33,18 @@ function parseStepData(rawStr: string | null): Record<string, any> {
   }
 }
 
-// GET 进度恢复接口：读取用户上次填写的分步数据
 export async function GET() {
   const testEmail = 'test@example.com';
   try {
     const user = await safeDbRun(async () => {
-      let u = await prisma.user.findUnique({
-        where: { email: testEmail }
-      });
+      let u = await prisma.user.findUnique({ where: { email: testEmail } });
       if (!u) u = await prisma.user.create({ data: { email: testEmail } });
       return u;
     });
 
     const userId = user.id;
-    const record = await safeDbRun(() =>
-      prisma.assessmentRecord.findUnique({ where: { userId } })
-    );
+    // 关键：强制断言为任意对象，TS不会推断成{}
+    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId } })) as Record<string, any> | null;
 
     if (!record) {
       return NextResponse.json(
@@ -58,10 +53,11 @@ export async function GET() {
       );
     }
 
-    const parsedStepData = parseStepData(record.stepData);
+    // 空值兜底
+    const parsedStepData = parseStepData(record.stepData ?? null);
 
     return NextResponse.json(
-      { stepData: parsedStepData, isCompleted: record.isCompleted },
+      { stepData: parsedStepData, isCompleted: record.isCompleted ?? false },
       { headers: corsHeaders }
     );
   } catch (error) {
@@ -73,34 +69,35 @@ export async function GET() {
   }
 }
 
-// POST 分步增量保存接口
 export async function POST(request: Request) {
   const testEmail = 'test@example.com';
   try {
-    const body = await request.json();
-    const { stepData } = body ?? {};
-    const saveData = stepData && typeof stepData === 'object' ? stepData : {};
+    const body = await request.json().catch(() => ({}));
+    const saveData = body?.stepData && typeof body.stepData === 'object' ? body.stepData : {};
 
     const user = await safeDbRun(async () => {
       let u = await prisma.user.findUnique({ where: { email: testEmail } });
-      if (!u) u = await prisma.user.create({ data: { email: testEmail } });
+      if (!u) u = await prisma.user.create({
+        data: {
+          email: testEmail,
+          subscription: { create: { status: "free" } }
+        }
+      });
       return u;
     });
 
     const userId = user.id;
-    const record = await safeDbRun(() =>
-      prisma.assessmentRecord.upsert({
-        where: { userId },
-        update: { stepData: JSON.stringify(saveData) },
-        create: {
-          userId,
-          stepData: JSON.stringify(saveData),
-          isCompleted: false,
-        },
-      })
-    );
+    const recordRaw = await safeDbRun(() => prisma.assessmentRecord.upsert({
+      where: { userId },
+      update: { stepData: JSON.stringify(saveData), isCompleted: false },
+      create: {
+        userId,
+        stepData: JSON.stringify(saveData),
+        isCompleted: false
+      },
+    })) as Record<string, any>;
 
-    const parsedStepData = parseStepData(record.stepData);
+    const parsedStepData = parseStepData(recordRaw.stepData ?? null);
 
     return NextResponse.json(
       { message: '分步进度保存成功', stepData: parsedStepData },

@@ -47,9 +47,7 @@ export async function GET() {
     const user = userRaw;
     const subscriptionStatus = user.subscription?.status || 'free';
 
-    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({
-      where: { userId: user.id }
-    }));
+    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({ where: { userId: user.id } })) as Record<string, any> | null;
 
     if (!record || !record.isCompleted) {
       return NextResponse.json(
@@ -58,7 +56,7 @@ export async function GET() {
       );
     }
 
-    const realResult = parseResult(record.result);
+    const realResult = parseResult(record.result ?? null);
     if (subscriptionStatus === 'active') {
       return NextResponse.json(
         {
