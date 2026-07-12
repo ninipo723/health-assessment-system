@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import type { User, AssessmentRecord, Subscription } from '@prisma/client';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,7 +24,6 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
   }
 }
 
-/** 安全解析result JSON字符串，兼容null空值 */
 function parseResult(rawStr: string | null): Record<string, any> {
   if (!rawStr) return {};
   try {
@@ -38,7 +36,6 @@ function parseResult(rawStr: string | null): Record<string, any> {
 export async function GET() {
   const testEmail = "test@example.com";
   try {
-    // 查询用户连带订阅关联
     const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail },
       include: { subscription: true }
@@ -47,14 +44,12 @@ export async function GET() {
     if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
+    const user = userRaw;
+    const subscriptionStatus = user.subscription?.status || 'free';
 
-    // 手动类型断言拆分，消除 subscription 访问标红
-    const user = userRaw as User & { subscription: Subscription | null };
-    const userId = user.id;
-
-    const record: AssessmentRecord | null = await safeDbRun(() =>
-      prisma.assessmentRecord.findUnique({ where: { userId } })
-    );
+    const record = await safeDbRun(() => prisma.assessmentRecord.findUnique({
+      where: { userId: user.id }
+    }));
 
     if (!record || !record.isCompleted) {
       return NextResponse.json(
@@ -63,12 +58,8 @@ export async function GET() {
       );
     }
 
-    // 可选链安全访问订阅状态
-    const subscriptionStatus = user.subscription?.status ?? 'free';
     const realResult = parseResult(record.result);
-
     if (subscriptionStatus === 'active') {
-      // 会员完整数据
       return NextResponse.json(
         {
           isPremium: true,
@@ -77,13 +68,11 @@ export async function GET() {
         { headers: corsHeaders }
       );
     } else {
-      // 免费用户脱敏
       const maskedResult = {
         bmi: realResult.bmi ?? 0,
         recommendedCalories: '*** (需开通会员查看)',
         targetDate: '*** (需开通会员查看)',
       };
-
       return NextResponse.json(
         {
           isPremium: false,

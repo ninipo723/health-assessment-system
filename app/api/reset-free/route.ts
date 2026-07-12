@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import type { User } from '@prisma/client';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,15 +27,13 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
 export async function POST() {
   const testEmail = "test@example.com";
   try {
-    const userRaw = await safeDbRun(() => prisma.user.findUnique({
+    const user = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail }
     }));
-    if (!userRaw) {
+    if (!user) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
-    const user = userRaw as User;
 
-    // 强制把订阅状态改为免费
     await safeDbRun(() => prisma.subscription.update({
       where: { userId: user.id },
       data: { status: "free" }

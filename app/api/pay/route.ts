@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import type { User, Subscription } from '@prisma/client';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,7 +27,6 @@ async function safeDbRun<T>(fn: () => Promise<T>, retryCount = 1): Promise<T> {
 export async function POST() {
   const testEmail = "test@example.com";
   try {
-    // 1. 先查询用户
     const userRaw = await safeDbRun(() => prisma.user.findUnique({
       where: { email: testEmail },
       include: { subscription: true }
@@ -36,9 +34,8 @@ export async function POST() {
     if (!userRaw) {
       return NextResponse.json({ error: "用户不存在" }, { status: 404, headers: corsHeaders });
     }
-    const user = userRaw as User & { subscription: Subscription | null };
+    const user = userRaw;
 
-    // 新增判断：当前已经是会员，直接返回提示
     if (user.subscription?.status === 'active') {
       return NextResponse.json(
         { message: '您已经是尊贵会员！无需重复开通' },
@@ -46,7 +43,6 @@ export async function POST() {
       );
     }
 
-    // 2. 使用upsert开通会员
     const updatedSubscription = await safeDbRun(() => prisma.subscription.upsert({
       where: { userId: user.id },
       update: {

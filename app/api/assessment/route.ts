@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import type { AssessmentRecord } from '@prisma/client';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,19 +38,16 @@ function parseStepData(rawStr: string | null): Record<string, any> {
 export async function GET() {
   const testEmail = 'test@example.com';
   try {
-    const user = await safeDbRun(() => prisma.user.findUnique({
-      where: { email: testEmail }
-    }));
-
-    if (!user) {
-      return NextResponse.json(
-        { stepData: {}, isCompleted: false },
-        { headers: corsHeaders }
-      );
-    }
+    const user = await safeDbRun(async () => {
+      let u = await prisma.user.findUnique({
+        where: { email: testEmail }
+      });
+      if (!u) u = await prisma.user.create({ data: { email: testEmail } });
+      return u;
+    });
 
     const userId = user.id;
-    const record: AssessmentRecord | null = await safeDbRun(() =>
+    const record = await safeDbRun(() =>
       prisma.assessmentRecord.findUnique({ where: { userId } })
     );
 
@@ -62,7 +58,6 @@ export async function GET() {
       );
     }
 
-    // 使用工具函数，类型安全
     const parsedStepData = parseStepData(record.stepData);
 
     return NextResponse.json(
@@ -86,25 +81,21 @@ export async function POST(request: Request) {
     const { stepData } = body ?? {};
     const saveData = stepData && typeof stepData === 'object' ? stepData : {};
 
-    // 用户不存在自动创建
-    const user = await safeDbRun(() => prisma.user.upsert({
-      where: { email: testEmail },
-      update: {},
-      create: {
-        email: testEmail,
-        subscription: { create: { status: "free" } }
-      }
-    }));
+    const user = await safeDbRun(async () => {
+      let u = await prisma.user.findUnique({ where: { email: testEmail } });
+      if (!u) u = await prisma.user.create({ data: { email: testEmail } });
+      return u;
+    });
 
     const userId = user.id;
-    const record: AssessmentRecord = await safeDbRun(() =>
+    const record = await safeDbRun(() =>
       prisma.assessmentRecord.upsert({
         where: { userId },
-        update: { stepData: JSON.stringify(saveData), isCompleted: false },
+        update: { stepData: JSON.stringify(saveData) },
         create: {
           userId,
           stepData: JSON.stringify(saveData),
-          isCompleted: false
+          isCompleted: false,
         },
       })
     );
